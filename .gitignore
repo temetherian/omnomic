@@ -1,0 +1,7 @@
+# ================ #
+# Python generated #
+# ================ #
+*.pyc
+
+# Vim generated
+*.swp

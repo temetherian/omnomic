@@ -1,0 +1,614 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "Noto Sans", sans-serif;
+  height: 100%;
+  background-image: url("/assets/bg.png");
+  background-color: #e7cdea;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: #c084c940;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #00000060;
+}
+
+#overlay {
+  background: black;
+  position: fixed;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  opacity: 0.5;
+}
+
+#container {
+  display: flex;
+  flex-direction: column;
+  padding: 0px;
+  background: #ffffff66;
+  position: relative;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  min-height: 100%;
+  width: calc(100% - 250px);
+}
+
+#office {
+  display: flex;
+  justify-content: flex-end;
+}
+
+#hideout {
+  display: flex;
+}
+
+#table {
+  padding-bottom: 138px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  justify-content: space-between;
+}
+
+#threat {
+  position: absolute;
+  height: 60px;
+  width: 300px;
+  top: 0;
+  left: 0;
+  padding-right: 3px;
+  padding-bottom: 3px;
+  margin: 0px;
+  background-color: #ffffffbb;
+  border-right: 1px solid black;
+  border-bottom: 1px solid black;
+}
+
+#threat.selected {
+  border-width: 3px;
+  border-color: #c1c62f;
+}
+
+#threat .star {
+  width: 60px;
+  height: 60px;
+  display: inline-block;
+  padding: 0px;
+  margin: 0px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-image: url(/assets/t-off.png);
+}
+
+#threat .threat-on {
+  background-image: url(/assets/t-on.png);
+}
+
+#setting {
+}
+
+#player {
+  display: none;
+  flex-shrink: 0;
+  border-top: 1px solid black;
+  padding-top: 5px;
+  margin-top: 4px;
+  position: absolute;
+  bottom: 0px;
+  width: 100%;
+  height: 128px;
+  background: #ffffffbb;
+}
+
+#hand-title {
+  padding-right: 40px;
+  display: inline-block;
+}
+
+#actions {
+  float: left;
+  display: inline-block;
+  width: 25%;
+}
+
+#actions button {
+  width: 80px;
+  padding: 5px;
+  margin-top: 5px;
+  margin-left: 1em;
+  background: #97609f;
+  border: 1px solid black;
+  font-weight: bold;
+  color: white;
+  border-radius: 4px;
+}
+
+#actions button:hover {
+  background: #692673;
+}
+
+#actions button:disabled {
+  color: #dedede;
+  background: #b394b8;
+  border-color: #808080;
+}
+
+#messagebox {
+  margin: 5px;
+  display: block;
+  overflow-y: auto;
+  height: calc(100% - 360px);
+}
+
+#messagebox .error {
+  color: red;
+}
+
+#messagebox .preview {
+  color: #592659;
+  text-decoration: underline dotted #59265980;
+  text-underline-position: under;
+}
+
+#hand {
+  display: inline-flex;
+  position: relative;
+  padding-left: 5px;
+  padding-right: 5px;
+  width: calc(75% - 10px);
+}
+
+div.scene {
+  display: inline-block;
+  text-align: center;
+  vertical-align: middle;
+  width: 33%;
+  position: relative;
+}
+
+.reschoice {
+    position: absolute;
+    display: none;
+    top: 0px;
+    left: 0px;
+    right: 0px;
+    bottom: 0px;
+    height: fit-content;
+    width: 90%;
+    margin: auto;
+    border: 3px solid #d280fc;
+    background-color: #ffffffbb;
+    font-size: 0;
+}
+
+.newscene {
+    width: 210px;
+    height: 150px;
+    margin: auto;
+		margin-top: 5px;
+    margin-bottom: 5px;
+    outline: 1px solid;
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.res-option {
+    height: 132px;
+    width: 96px;
+    display: inline-block;
+    margin-left: 5px;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    outline: 1px solid #d280fc;
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.avertme {
+  position: absolute;
+  display: none;
+  top: 0px;
+  left: 0px;
+  right: 0px;
+  height: 140px;
+  width: 100px;
+  margin: auto;
+  outline: 2px solid red;
+  background-color: #ededed;
+  background-size: contain;
+  background-position: top;
+  background-repeat: no-repeat;
+}
+
+.dontavert {
+  position: absolute;
+  display: none;
+  top: 140px;
+  left: 0px;
+  right: 0px;
+  height: 30px;
+  width: 100px;
+  margin: auto;
+}
+
+.dontavert button {
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  outline: 2px solid red;
+  border: 1px solid white;
+  background: red;
+  color: white;
+  font-weight: bold;
+}
+
+.dontavert button:hover {
+  background: white;
+  color: red;
+  transition-duration: 0.5s;
+}
+
+div.scene-floater {
+  height: 0px;
+  width: 0px;
+  position: relative;
+  display: inline-block;
+}
+
+div.scene-token {
+  height: 78px;
+  width: 56px;
+  display: none;
+  position: absolute;
+  right: 0px;
+  top: -43px;
+  background-color: #ededed;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  outline: 1px solid gray;
+}
+
+div.scene-card {
+  display: none;
+  vertical-align: middle;
+  text-align: center;
+  background-color: lightgray;
+  color: #af2323;
+  font-weight: bold;
+  font-size: 52px;
+  height: 80px;
+  width: 112px;
+  margin: 4px;
+  padding: 0px;
+  outline: 1px solid gray;
+  white-space: pre-line;
+  user-select: none;
+}
+
+.inf-req {
+  font-size: 26px;
+}
+
+div.scene-card.threat {
+  outline-width: 3px;
+  outline-color: #c1c62f;
+}
+
+div.scene-card.is-option {
+  outline-color: #77dd77;
+  outline-width: 3px;
+}
+
+div.scene-card.can-score {
+  outline-width: 3px;
+  outline-color: #d280fc;
+}
+
+.guard-points, .lock-points, .counters {
+  height: 24px;
+  width: 24px;
+  align-self: center;
+  margin-bottom: auto;
+  margin-top: 32px;
+  line-height: 24px;
+  font-size: 16px;
+  font-weight: bold;
+  user-select: none;
+}
+
+.guard-points {
+  background: #9e0b0f;
+  color: #ffffff;
+}
+
+.lock-points {
+  background: #a3a3a3;
+  color: #000000;
+}
+
+.counters {
+  background: #ffffff;
+  color: #000000;
+}
+
+ul.cardlist {
+  display: flex;
+  height: 120px;  /* li height + margins + padding */
+  text-align: center;
+  padding: 0px;
+  margin: 0px;
+  justify-content: center;
+}
+
+#hand ul.cardlist {
+  display: inline-flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+}
+
+#hand ul.cardlist::-webkit-scrollbar {
+  height: 5px;
+}
+
+#hand ul.cardlist::-webkit-scrollbar-track {
+  background-color: #c084c940;
+}
+
+#hand ul.cardlist::-webkit-scrollbar-thumb {
+  background: #00000060;
+}
+
+ul.cardlist li {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  vertical-align: middle;
+  background-color: white;
+  text-align: center;
+  height: 112px;
+  width: 80px;
+  margin: 4px;
+  padding: 0px;
+  outline: 1px solid black;
+  white-space: pre-line;
+  flex-shrink: 0;
+}
+
+ul.cardlist li.crew {
+  outline-color: #2375af;
+  background-color: #66bfff;
+}
+
+ul.cardlist li.powers {
+  outline-color: #af2323;
+  background-color: #ff6666;
+}
+
+ul.cardlist li.attached {
+  transform: scale(0.9, 0.9);
+  margin-left: -10px;
+}
+
+ul.cardlist li.unknown,.facedown {
+  background-size: contain;
+  background-image: url('/assets/powers.png');
+}
+
+ul.cardlist li.facedown.complication {
+  height: 80px;
+  width: 112px;
+  margin-top: 16px;
+  margin-bottom: 16px;
+  background-size: contain;
+  background-image: url('/assets/powers90.png');
+}
+
+ul.cardlist li.selected {
+  outline-width: 3px;
+}
+
+ul.cardlist li button {
+  width: 92%;
+  height: 30%;
+  background: 0;
+  align-self: center;
+}
+
+ul.cardlist li.is-option {
+  outline-color: #77dd77;
+  outline-width: 3px;
+}
+
+ul.cardlist li.is-option button {
+  display: none;
+}
+
+.staging {
+  float: left;
+  display: inline-block;
+}
+
+#office_location {
+  display: inline-flex;
+  flex-direction: column;
+  margin-left: 20px;
+  margin-right: 40px;
+  align-self: center;
+  height: 100px;
+  width: 140px;
+  background-image: url("/assets/office.png");
+  background-size: contain;
+}
+
+#offinf {
+  color: #af2323;
+  align-self: center;
+  margin-bottom: -11px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 64px;
+  user-select: none;
+}
+
+#office_location button {
+  width: 93%;
+  height: 25%;
+  background: 0;
+  align-self: center;
+}
+
+#hideout_location {
+  display: inline-flex;
+  justify-content: center;
+  margin-left: 40px;
+  margin-right: 20px;
+  align-self: center;
+  height: 100px;
+  width: 140px;
+  background-image: url("/assets/hideout.png");
+  background-size: contain;
+}
+
+#hideout_location button {
+  width: 93%;
+  height: 25%;
+  background: 0;
+  align-self: flex-end;
+}
+
+.score-floater{
+	height: 0px;
+	width: 0px;
+	position: relative;
+	display: inline-block;
+}
+
+.score {
+    position: absolute;
+    height: 40px;
+    width: 40px;
+    text-align: center;
+    line-height: 40px;
+    font-size: 35px;
+    top: 40px;
+    background: #ffffffbb;
+    background-image: url(/assets/score.png);
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+#crew-score {
+    left: 5px;
+    outline: 1px solid #2375af;
+}
+
+#powers-score {
+    right: 5px;
+    outline: 1px solid #af2323;
+}
+
+h3 {
+  margin: 3px 3px 3px 5px;
+}
+
+#discard {
+  display: none;
+  color: red;
+  align-self: center;
+  text-align: center;
+  padding-left: 1em;
+  font-size: larger;
+}
+
+#mulligan {
+  display: none;
+  width: 110px;
+  margin: auto;
+  height: 30px;
+  background: #97609f;
+  border: 1px solid black;
+  color: white;
+  align-self: center;
+  text-align: center;
+  font-weight: bold;
+  border-radius: 4px;
+  padding: 5px;
+}
+
+#sidebar {
+  display: none;
+  position: fixed;
+  right: 0;
+  top: 0;
+  width: 250px;
+  bottom: 0px;
+  background: #ffffffbb;
+  border-left: 1px solid black;
+}
+
+#card-preview {
+  background-size: contain;
+  background-repeat: no-repeat;
+  width: 250px;
+  height: 350px;
+}
+
+#token-preview {
+  position: absolute;
+  top: 180px;
+  width: 250px;
+  height: 50px;
+  display: flex;
+  justify-content: center;
+}
+
+#token-preview div.token {
+  width: 50px;
+  height: 50px;
+  display: inline-block;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  text-align: center;
+  line-height: 50px;
+  font-size: 30px;
+}
+
+#skip-select {
+    display: none;
+    height: 50px;
+    width: 130px;
+    position: absolute;
+    bottom: 134px;
+    right: 0px;
+    background: #ffffffbb;
+    outline: 1px solid black;
+}
+
+#skip-button {
+    width: 110px;
+    margin: auto;
+    height: 30px;
+    background: #196619;
+    border: 1px solid #77dd77;
+    font-weight: bold;
+    color: white;
+    border-radius: 4px;
+}

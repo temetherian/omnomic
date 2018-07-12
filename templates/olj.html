@@ -1,0 +1,931 @@
+<html>
+  <head>
+  <style>
+  @import url("/styles/style.css");
+  </style>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.3/jquery.min.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+  {% include "templates/_firebase_config.html" %}
+  <script>
+  var Game = {};
+  Game.me = {{ player_id }};
+  Game.hand_toggle = "play";
+  Game.action_count = 0;
+
+  function mulligan() {
+    var card_ids = $("#hand-cards li.selected").map(
+        function() { return $(this).data("card_id"); }
+    ).get();
+    $.post('/{{ game_id }}/{{ player_id }}/mulligan', {'cs[]': card_ids});
+  }
+
+  function drawOne() {
+    $.post('/{{ game_id }}/{{ player_id }}/draw');
+  }
+
+  {% if player_id == 2 %}
+  function offInf() {
+    $.post('/{{ game_id }}/{{ player_id }}/offinf');
+  }
+
+  function spendThreat(position) {
+    unreadyThreat();
+    $.post('/{{ game_id }}/{{ player_id }}/threat', {p: position});
+  }
+
+  function chooseResolution(resolution) {
+    $('.reschoice').hide();
+    if (Game.me == Game.acting_player) {
+      $.post('/{{ game_id }}/{{ player_id }}/pickres', {r: resolution});
+    }
+  }
+
+  function scoreResolution(position) {
+    if (Game.me == Game.acting_player) {
+      $.post('/{{ game_id }}/{{ player_id }}/score', {p: position});
+    }
+  }
+  {% endif %}
+
+  {% if player_id == 1 %}
+  function hideoutSkill() {
+    $.post('/{{ game_id }}/{{ player_id }}/hidskill');
+  }
+
+  function startOperation(position) {
+    if (Game.me == Game.acting_player) {
+      $.post('/{{ game_id }}/{{ player_id }}/operate', {p: position});
+    }
+  }
+
+  function avert(card_ids) {
+    $.post('/{{ game_id }}/{{ player_id }}/avert', {'cs[]': card_ids});
+    resetOptions();
+  }
+
+  function dontAvert(card_ids) {
+    $.post('/{{ game_id }}/{{ player_id }}/sure');
+    resetOptions();
+  }
+
+  function equip(item_id, holder_id) {
+    unreadyEquip(item_id);
+    if (Game.me == Game.acting_player) {
+      $.post('/{{ game_id }}/{{ player_id }}/equip', { i: item_id, h: holder_id });
+    }
+  }
+
+  function unequip(item_id) {
+    unreadyEquip(item_id);
+    if (Game.me == Game.acting_player) {
+      $.post('/{{ game_id }}/{{ player_id }}/unequip', { i: item_id });
+    }
+  }
+  {% endif %}
+
+  function endTurn() {
+    $.post('/{{ game_id }}/{{ player_id }}/end');
+  }
+
+  function play(card_id) {
+    $.post('/{{ game_id }}/{{ player_id }}/play', { c: card_id });
+  }
+
+  function playWithTarget(card_id, target) {
+    $.post('/{{ game_id }}/{{ player_id }}/play', { c: card_id, t: target });
+    resetTargets();
+  }
+
+  function use(card_id, ability) {
+    $.post('/{{ game_id }}/{{ player_id }}/use', { c: card_id, a: ability });
+  }
+
+  function discard(card_id) {
+    $.post('/{{ game_id }}/{{ player_id }}/discard', { c: card_id });
+  }
+
+  function select(card_id) {
+    $.post('/{{ game_id }}/{{ player_id }}/select', { c: card_id });
+    resetOptions();
+  }
+
+  function resetClickHandlers() {
+    var table_cards = $("#table .cardlist li");
+    table_cards.find("button").prop('disabled', false);
+    for (var i = 0; i < table_cards.length; i++) {
+      var card = $(table_cards[i]);
+      {% if player_id == 1 %}
+      if (card.hasClass('operative')) {
+        card.attr('onclick', 'readyMove(' + card.data("card_id") + ');');
+      } else if (card.hasClass('item')) {
+        card.attr('onclick', 'readyEquip(' + card.data("card_id") + ');');
+      }
+      {% elif player_id == 2 %}
+      if (card.hasClass('actor')) {
+        card.attr('onclick', 'readyMove(' + card.data("card_id") + ');');
+      }
+      {% endif %}
+    }
+    var hand_cards = $("#hand .cardlist li");
+    for (var i = 0; i < hand_cards.length; i++) {
+      var card = $(hand_cards[i]);
+      card.attr('onclick', 'handClick(event, ' + card.data("card_id") + ');');
+    }
+  }
+
+  function disableClickHandlers() {
+    $(".cardlist li").attr('onclick', '');
+    $(".cardlist li").find("button").prop('disabled', true);
+  }
+
+  function resetOptions() {
+    var old = $(".is-option");
+    old.removeAttr("onclick");
+    old.removeClass('is-option');
+    $("#skip-select").hide();
+
+    resetClickHandlers();
+  }
+
+  function toggleForMulligan(card_id) {
+    var card_li = $("#card" + card_id);
+    card_li.toggleClass("selected");
+  }
+
+  function handClick(event, card_id) {
+    if (Game.me == Game.acting_player) {
+      if (Game.hand_toggle == "discard") {
+        discard(card_id);
+      } else if (Game.hand_toggle == "mulligan") {
+        toggleForMulligan(card_id);
+      } else {
+        if ($("#target").is(":visible")) {
+          resetTargetDiv();
+        } else {
+          var card_li = $("#card" + card_id);
+          if (Game.action_count >= card_li.data().cost) {
+            // We should maybe just remove the click handler if the cost is too high, but whatever
+            if (card_li.data().target_type != undefined) {
+              requestPlayTarget(card_id, card_li.data().target_type);
+            } else {
+              play(card_id);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function requestPlayTarget(card_id, target_type) {
+    disableClickHandlers();
+    var card_li = $("#card" + card_id);
+    var card_id = card_li.data("card_id");
+    var targets = card_li.data("targets");
+    for (var i = 0; i < targets.length; i++) {
+      var target = targets[i];
+      if (target_type == 'card') {
+        var target_li = $("#card" + target);
+        target_li.addClass('is-option');
+        target_li.attr("onclick", "playWithTarget(" + card_id + ",'" + target + "')");
+      } else if (target_type == 'scene_position') {
+        var scene = $("#" + target + "_location");
+        scene.addClass('is-option');
+        scene.attr("onclick", "playWithTarget(" + card_id + ", '" + target + "')");
+      } else if (target_type == 'scene') {
+        var scene = $('.scene-card').filter( function() { return $(this).data('scene_id') == target; } );
+        scene.addClass('is-option');
+        scene.attr("onclick", "playWithTarget(" + card_id + ",'" + target + "')");
+      }
+    }
+    card_li.addClass('selected');
+    card_li.attr('onclick', 'resetTargets()');
+  }
+
+  function resetTargets() {
+    // This is for the older style of playing a card from hand with a target
+    // instead of the server requesting a target after the intent-to-play has been made.
+    var selector = $(".selected");
+    selector.removeClass("selected");
+
+    resetOptions();
+  }
+
+  function updatePreview(db_class, db_id) {
+    $('#card-preview').css({"background-image": "url('/assets/" + db_class + "s/" + db_id + ".png')"});
+  }
+
+  function emptyPreview() {
+    $('#card-preview').css({"background-image": ""});
+  }
+
+  function updateTokenPreview(tokens) {
+    for (var i = 0; i < tokens.length; i++) {
+      var token = $('<div/>');
+      token.addClass('token');
+      token.css({"background-image": "url('/assets/" + tokens[i].charAt(0) + ".png')"});
+      if (tokens[i].charAt(0) == "R" && tokens[i].charAt(1) != "_") {
+        token.text(tokens[i].charAt(1));
+      }
+      $('#token-preview').append(token);
+    }
+  }
+
+  function emptyTokenPreview() {
+    $('#token-preview').empty();
+  }
+
+  function unreadyThreat() {
+    $("#threat").removeClass('selected');
+    $("#threat").attr("onclick", "readyThreat()");
+
+    $("#scene_0_location").removeAttr("onclick");
+    $("#scene_0_location").removeClass("threat");
+    $("#scene_1_location").removeAttr("onclick");
+    $("#scene_1_location").removeClass("threat");
+    $("#scene_2_location").removeAttr("onclick");
+    $("#scene_2_location").removeClass("threat");
+  }
+
+  function readyThreat() {
+    $("#threat").addClass('selected');
+    $("#threat").attr("onclick", "unreadyThreat()");
+
+    $("#scene_0_location").attr("onclick", "spendThreat('scene_0')");
+    $("#scene_0_location").addClass("threat");
+    $("#scene_1_location").attr("onclick", "spendThreat('scene_1')");
+    $("#scene_1_location").addClass("threat");
+    $("#scene_2_location").attr("onclick", "spendThreat('scene_2')");
+    $("#scene_2_location").addClass("threat");
+  }
+
+  function unreadyEquip(card_id) {
+    var card_li = $("#card" + card_id);
+    card_li.removeClass('selected');
+    // card_li.attr("onclick", "readyEquip(" + card_id + ")");
+    // card_li.find("button").prop("disabled", false);
+
+    resetClickHandlers();
+  }
+
+  function readyEquip(card_id) {
+    disableClickHandlers();
+    var card_li = $("#card" + card_id);
+    card_li.addClass('selected');
+    card_li.attr("onclick", "unreadyEquip(" + card_id + ")");
+    card_li.find("button").prop("disabled", true);
+
+    var ops = $("#table").find('li.operative');
+    for (var i = 0; i < ops.length; i++) {
+      var op = $(ops[i]);
+      op.find("button").prop("disabled", true);
+      if ( op.data('card_id') == card_li.data('holder') ) {
+        op.attr("onclick", "unequip(" + card_id + ")");
+      } else if ( op.siblings().is(card_li) ) {
+        op.attr("onclick", "equip(" + card_id + ", " + op.data('card_id') + ")");
+      } else {
+        op.attr("onclick", "");
+      }
+    }
+  }
+
+  function unreadyMove(card_id) {
+    var card_li = $("#card" + card_id);
+    card_li.removeClass('selected');
+    // card_li.attr("onclick", "readyMove(" + card_id + ")");
+    // card_li.find("button").prop("disabled", false);
+
+    $("#office_location").removeAttr("onclick");
+    $("#scene_0_location").removeAttr("onclick");
+    $("#scene_1_location").removeAttr("onclick");
+    $("#scene_2_location").removeAttr("onclick");
+    $("#hideout_location").removeAttr("onclick");
+    resetClickHandlers();
+  }
+
+  function readyMove(card_id) {
+    disableClickHandlers();
+    card_li = $("#card" + card_id);
+    card_li.addClass('selected');
+    card_li.attr("onclick", "unreadyMove(" + card_id + ")");
+
+    card_li.find("button").prop("disabled", true);
+
+    $("#office_location").attr("onclick", "move(" + card_id + ", 'office')");
+    $("#scene_0_location").attr("onclick", "move(" + card_id + ", 'scene_0')");
+    $("#scene_1_location").attr("onclick", "move(" + card_id + ", 'scene_1')");
+    $("#scene_2_location").attr("onclick", "move(" + card_id + ", 'scene_2')");
+    $("#hideout_location").attr("onclick", "move(" + card_id + ", 'hideout')");
+  }
+
+  function move(card_id, loc) {
+    unreadyMove(card_id);
+    if (Game.me == Game.acting_player) {
+      $.post('/{{ game_id }}/{{ player_id }}/move', { c: card_id, l: loc });
+    }
+  }
+
+  function maybeTogglePlayer() {
+    if (Game.me == Game.acting_player) {
+      $("#pronoun").text("Your");
+      $("#draw").prop("disabled", false);
+      $("#end").prop("disabled", false);
+    } else {
+      $("#pronoun").text("Their");
+      $("#draw").prop("disabled", true);
+      $("#end").prop("disabled", true);
+    }
+  }
+
+  function updateActionCount(c) {
+    Game.action_count = c;
+    $("#action-count").text(c);
+  }
+
+  function updateThreatLevel(t) {
+    for (var i = 1; i <= 5; i++) {
+      if (i <= t) {
+        $("#threat" + i).addClass("threat-on");
+      } else {
+        $("#threat" + i).removeClass("threat-on");
+      }
+    }
+    {% if player_id == 2 %}
+    if (t >= 1) {
+      $("#threat").attr('onclick', 'readyThreat()');
+    } else {
+      $("#threat").removeAttr('onclick');
+    }
+    {% endif %}
+  }
+
+  function updateMessage(txt, object_class, db_id) {
+    var msg = $("#messagebox");
+    var new_msg = $("<div/>");
+    if (db_id !== undefined) {
+      new_msg.addClass('preview');
+      new_msg.mouseover(function () { updatePreview(object_class, db_id); } );
+      new_msg.mouseout(function () { emptyPreview(); } );
+    }
+    if (object_class == "errors") {
+      new_msg.addClass('error');
+    }
+    new_msg.text(txt).fadeIn(200);
+    msg.append(new_msg);
+    msg.scrollTop(msg.prop("scrollHeight"));
+  }
+
+  function divFromLocation(loc, player) {
+    if (loc == '{{ player }}_hand') {
+      return $("#hand-cards");
+    } else if (loc.substr(0,6) == 'scene_') {
+      suffix = (player == 1) ? "-crew" : "-powers";
+      return $("#" + loc.replace("_", "-") + suffix);
+    } else {
+      return $("#" + loc.replace("_", "-") + "-cards");
+    }
+  }
+
+  function deleteDummyCardFromLocation(loc, player) {
+    loc_div = divFromLocation(loc, player);
+    loc_div.find("li.unknown").first().remove();
+  }
+
+  function updateCard(card) {
+    var card_li = $('<li/>');
+    if (card.player == 1) {
+      card_li.addClass('crew');
+    } else {
+      card_li.addClass('powers');
+    }
+    if (card.card_id === undefined) {
+      // We don't know which card it is, so we can't manipulate it.
+      card_li.addClass('unknown');
+      if (card.prev_position !== undefined) {
+        deleteDummyCardFromLocation(card.prev_position, card.player);
+      }
+    } else {
+      if ($("#card" + card.card_id).length > 0) {
+        $("#card" + card.card_id).remove();
+      } else if (card.prev_position !== undefined) {
+        deleteDummyCardFromLocation(card.prev_position, card.player);
+      } else if (card.prev_is_faceup == false) {
+        deleteDummyCardFromLocation(card.position, card.player);
+      }
+      card_li.attr("id", "card" + card.card_id);
+      card_li.data({"card_id": card.card_id,
+                    "cost": card.cost,
+                    "abilities": card.abilities,
+                    "target_type": card.target_type,
+                    "skill_points": card.skill_points,
+                    "holder": card.holder});
+      if (card.db_id !== undefined) {
+        card_li.css({"background-size": "contain", "background-image": "url('/assets/cards/" + card.db_id + ".png')"});
+        card_li.mouseover(function () { updatePreview('card', card.db_id); } );
+        card_li.mouseout(function () { emptyPreview(); } );
+      } else {
+        // TODO: Only Powers cards would currently be displayed facedown,
+        //       but that will change if we ever show the opponent's hand.
+        card_li.addClass('facedown');
+      }
+      if (card.type) {
+        card_li.addClass(card.type);
+      }
+      if (card.skill_points !== undefined) {
+        if (card.skill_points[0] > 0) {
+          var guard = $('<div/>');
+          guard.text(card.skill_points[0]);
+          guard.addClass('guard-points');
+          card_li.append(guard);
+        }
+        if (card.skill_points[1] > 0) {
+          var lock = $('<div/>');
+          lock.text(card.skill_points[1]);
+          lock.addClass('lock-points');
+          card_li.append(lock);
+        }
+      }
+      if (card.counters !== undefined && card.counters > 0) {
+        var counters = $('<div/>');
+        counters.text(card.counters);
+        counters.addClass('counters');
+        card_li.append(counters);
+      }
+      if (card.holder) {
+        card_li.addClass('attached');
+      }
+      if (card.abilities !== undefined && card.position !== '{{ player }}_hand') {
+        for (var i = 0; i < card.abilities.length; i++) {
+          var button = $('<button/>');
+          var name = card.abilities[i];
+          button.off("click").click( function(e) {
+            use(card.card_id, name);
+            e.stopPropagation();
+          });
+          button.prop("disabled", true);
+          card_li.append(button);
+        }
+      }
+    }
+    loc_div = divFromLocation(card.position, card.player);
+    if (loc_div.has(card_li).length == 0) {
+      loc_div.append(card_li);
+    }
+    fixAttachments(loc_div);
+  }
+
+  function fixAttachments(div) {
+    var cards = div.find('li');
+    for (var i = 0; i < cards.length; i++) {
+      var card = $(cards[i]);
+      if (card.data('holder')) {
+        card.insertAfter("#card" + card.data('holder'));
+      }
+    }
+  }
+
+  function updateScene(scene) {
+    if (scene.position == "scene_discard" && scene.prev_position !== undefined) {
+      var old_position = $("#" + scene.prev_position + "_location");
+      old_position.hide();
+      var scene_token = $("#" + scene.prev_position + "_token");
+      scene_token.css({"background-image": ""});
+      scene_token.hide();
+    }
+    var scene_card = $("#" + scene.position + "_location");
+    scene_card.data({"scene_id": scene.scene_id,
+                     "tokens": scene.tokens});
+    scene_card.css({"display": "inline-block",
+                    "background-size": "contain",
+                    "background-image": "url('/assets/cards/" + scene.db_id + ".png')"});
+    scene_card.off('mouseover').mouseover(function () { updatePreview('card', scene.db_id); updateTokenPreview(scene.tokens); } );
+    scene_card.off('mouseout').mouseout(function () { emptyPreview(); emptyTokenPreview(); } );
+    scene_card.text(scene.influence);
+    if (scene.inf_req) {
+      var ir = $("<span/>");
+      ir.addClass("inf-req");
+      ir.text("/" + scene.inf_req);
+      scene_card.append(ir);
+    }
+    var scene_token = $("#" + scene.position + "_token");
+    if (scene.attached_token) {
+      var token_index = (scene.attached_token == 'G') ? 0 : 1;
+      scene_token.css({"background-image": "url('/assets/tokens/" + token_index + ".png')"});
+      scene_token.mouseover(function () { updatePreview('token', token_index); } );
+      scene_token.mouseout(function () { emptyPreview(); } );
+      scene_token.show();
+    } else {
+      scene_token.css({"background-image": ""});
+      scene_token.hide();
+    }
+    {% if player_id == 1 %}
+    scene_card.off("dblclick").dblclick(function (e) {
+      startOperation(scene.position);
+      e.stopPropagation();
+    });
+    {% endif %}
+    {% if player_id == 2 %}
+    if (scene.influence >= scene.inf_req) {
+      scene_card.addClass("can-score");
+      scene_card.off("dblclick").dblclick(function (e) {
+        scoreResolution(scene.position);
+        $(this).removeClass("can-score");
+        $(this).off("dblclick");
+        e.stopPropagation();
+      });
+    }
+    {% endif %}
+  }
+
+  function updateOffice(office) {
+    office_card = $("#offinf");
+    office_card.text(office.influence);
+  }
+
+  function updateState(data) {
+    if (!data) {
+      return;
+    }
+    // TODO: Update card states here
+    var toUpdate = [];
+    toUpdate.push.apply(toUpdate, data.cards);
+    toUpdate.push.apply(toUpdate, data.{{ player }}_hand);
+    toUpdate.push.apply(toUpdate, data.hideout);
+    toUpdate.push.apply(toUpdate, data.office);
+    toUpdate.push.apply(toUpdate, data.scene_0);
+    toUpdate.push.apply(toUpdate, data.scene_1);
+    toUpdate.push.apply(toUpdate, data.scene_2);
+    for (var i = 0; i < toUpdate.length; i++) {
+      updateCard(toUpdate[i]);
+    }
+    if (data.active_scenes !== undefined) {
+      for (var i = 0; i < data.active_scenes.length; i++) {
+        updateScene(data.active_scenes[i]);
+      }
+    }
+    if (data.crew_points !== undefined) {
+      $("#crew-score").text(data.crew_points);
+    }
+    if (data.powers_points !== undefined) {
+      $("#powers-score").text(data.powers_points);
+    }
+    if (data.acting_player_actions !== undefined) {
+      updateActionCount(data.acting_player_actions);
+    }
+    if (data.game_events !== undefined) {
+      for (var i = 0; i < data.game_events.length; i++) {
+        var changes = data.game_events[i].changes;
+        if (changes !== undefined) {
+          for (var j = 0; j < changes.length; j++) {
+            if (changes[j].type == "card") {
+              updateCard(changes[j].change);
+            }
+            if (changes[j].type == "scene") {
+              updateScene(changes[j].change);
+            }
+            if (changes[j].type == "office") {
+              updateOffice(changes[j].change);
+            }
+            if (changes[j].type == "acting_player_actions") {
+              updateActionCount(changes[j].change);
+            }
+            if (changes[j].type == "errors") {
+              updateMessage(changes[j].change, "errors");
+            }
+            if (changes[j].type == "message") {
+              updateMessage(changes[j].change);
+            }
+            if (changes[j].type == "message_with_object") {
+              updateMessage(changes[j].change.message,
+                            changes[j].change.object_class,
+                            changes[j].change.db_id);
+            }
+            if (changes[j].type == "threat_level") {
+              updateThreatLevel(changes[j].change);
+            }
+            if (changes[j].type == "crew_points") {
+              $("#crew-score").text(changes[j].change);
+            }
+            if (changes[j].type == "powers_points") {
+              $("#powers-score").text(changes[j].change);
+            }
+          }
+        }
+      }
+    }
+    if (data.{{player}}_deck_size !== undefined) {
+      $("#draw").text("Draw (" + data.{{player}}_deck_size + ")");
+    }
+    if (data.office_influence !== undefined) {
+      $("#offinf").text(data.office_influence);
+    }
+    if (data.threat_level !== undefined) {
+      updateThreatLevel(data.threat_level);
+    }
+    if (data.acting_player) {
+      Game.acting_player = data.acting_player;
+      maybeTogglePlayer();
+    }
+    if (data.plies !== undefined) {
+      if (data.plies[0] == "DiscardPly") {
+        $("#discard").show();
+        $("#player").css("z-index", 100);
+        $("#player").css("background", "white");
+        $("#sidebar").css("z-index", 100);
+        $("#overlay").css("z-index", 50);
+        $("#draw").prop("disabled", true);
+        $("#end").prop("disabled", true);
+        Game.hand_toggle = "discard";
+      } else if (data.plies[0] == "MulliganPly") {
+        $("#mulligan").prop('disabled', false).show();
+        $("#player").css("z-index", 100);
+        $("#player").css("background", "white");
+        $("#sidebar").css("z-index", 100);
+        $("#overlay").css("z-index", 50);
+        $("#draw").prop("disabled", true);
+        $("#end").prop("disabled", true);
+        Game.hand_toggle = "mulligan";
+      }
+    } else {
+      $("#discard").hide();
+      $("#mulligan").prop('disabled', true).hide();
+      $("#player").css("z-index", "inherit");
+      $("#player").css("background", "#ffffffbb");
+      $("#overlay").css("z-index", -1);
+      Game.hand_toggle = "play";
+    }
+    if (data.resolution_options !== undefined) {
+      var newscene = $("#" + data.position + " .newscene");
+      newscene.css({"background-image": "url('/assets/cards/" + data.scene_db_id + ".png')"});
+      newscene.mouseover(function () { updatePreview('card', data.scene_db_id); } );
+      newscene.mouseout(function () { emptyPreview(); } );
+      var resoptions_div = $("#" + data.position + " .res-options");
+      resoptions_div.empty();
+      for (var i = 0; i < data.resolution_options.length; i++) {
+        var option_div = $('<div/>');
+        var res = data.resolution_options[i];
+        option_div.addClass('res-option');
+        option_div.data({'resolution': res});
+        option_div.css({"background-image": "url('/assets/resolutions/" + res + ".png')"});
+        option_div.mouseover(function () { updatePreview('resolution', $(this).data('resolution')); } );
+        option_div.mouseout(function () { emptyPreview(); } );
+        option_div.off("click").click(function () { chooseResolution($(this).data('resolution')) });
+        resoptions_div.append(option_div);
+      }
+      $("#" + data.position + " .reschoice").show();
+    } else {
+      $('.reschoice').hide();
+    }
+    if (data.select_options !== undefined) {
+      for (var i = 0; i < data.select_options.length; i++) {
+        var object_id = data.select_options[i];
+        if (object_id == "__cancel") {
+          $("#skip-select").css({"display": "flex"});
+          $("#skip-select").show("scale", {origin: ["bottom", "right"]}, 200);
+        }
+        if (data.select_type == "card" ) {
+          var card_li = $("#card" + object_id);
+          card_li.addClass('is-option');
+          card_li.attr("onclick", "select(" + object_id + ")");
+        } else if (data.select_type == 'scene_position') {
+          var scene = $("#" + object_id + "_location");
+          scene.addClass('is-option');
+          scene.attr("onclick", "select('" + object_id + "')");
+        } else if (data.select_type == 'scene') {
+          var scene = $('.scene-card').filter( function() { return $(this).data('scene_id') == object_id } );
+          scene.addClass('is-option');
+          scene.attr("onclick", "select(" + object_id + ")");
+        }
+      }
+    } else if (data.options !== undefined) {  // Older version of select_options
+      // Maybe disable all buttons here?
+      for (var i = 0; i < data.options.length; i++) {
+        var card_id = data.options[i];
+        card_li = $("#card" + card_id);
+        card_li.addClass('is-option');
+        card_li.attr("onclick", "select(" + card_id + ")");
+      }
+    } else {
+      resetClickHandlers();
+    }
+    {% if player_id == 1 %}
+    if (data.aversion_location !== undefined) {
+      Game.unpaid_aversion_cost = data.aversion_cost;
+      Game.aversion_location = data.aversion_location;
+      Game.paying_card_ids = [];
+      avert_me = $('.avertme');
+      avert_me.css({"background-image": "url('/assets/" + data.aversion_owner_class + "s/" + data.aversion_owner_db_id + ".png')"});
+      avert_me.mouseover(function () { updatePreview(data.aversion_owner_class, data.aversion_owner_db_id); } );
+      avert_me.mouseout(function () { emptyPreview(); } );
+      $("#" + Game.aversion_location + " .dontavert").show();
+      $("#" + Game.aversion_location + " .avertme").fadeIn(400);
+      requestNextUnpaidSkill();
+    } else {
+      delete Game.unpaid_aversion_cost;
+      delete Game.aversion_location;
+      delete Game.paying_card_ids;
+      $('.avertme').fadeOut(400);
+    }
+    {% elif player_id == 2 %}
+    if (data.aversion_location !== undefined) {
+      Game.aversion_location = data.aversion_location;
+      avert_me = $('.avertme');
+      avert_me.css({"background-image": "url('/assets/" + data.aversion_owner_class + "s/" + data.aversion_owner_db_id + ".png')"});
+      avert_me.mouseover(function () { updatePreview(data.aversion_owner_class, data.aversion_owner_db_id); } );
+      avert_me.mouseout(function () { emptyPreview(); } );
+      $("#" + Game.aversion_location + " .avertme").fadeIn(400);
+    } else {
+      delete Game.aversion_location;
+      $('.avertme').fadeOut(400);
+    }
+    {% endif %}
+    if (data.targets !== undefined) {
+      var targeting_cards = Object.keys(data.targets);
+      for (var i = 0; i < targeting_cards.length; i++) {
+        var card_id = targeting_cards[i];
+        card_li = $("#card" + card_id);
+        card_li.data({"targets": data.targets[card_id]})
+      }
+    }
+  }
+
+  function requestNextUnpaidSkill() {
+    var crew_cards_there = divFromLocation(Game.aversion_location, 1).find('li.crew');
+    var skill_index = (Game.unpaid_aversion_cost[0] == 'G') ? 0 : 1;
+    for (var c = 0; c < crew_cards_there.length; c++) {
+      var card_li = $(crew_cards_there[c]);
+      if (card_li.data('skill_points') !== undefined && card_li.data('skill_points')[skill_index] > 0) {
+        card_li.addClass('is-option');
+        // I should probably use .off().on('click', function() { etc }), but I'm kinda lazy.
+        card_li.attr("onclick", "paySkillWith(" + card_li.data('card_id') + ")");
+      }
+    }
+  }
+
+  function paySkillWith(card_id) {
+    var skill_index;
+    var skill_div;
+    var old = $(".is-option");
+    old.removeAttr("onclick");
+    old.removeClass('is-option');
+    if (Game.unpaid_aversion_cost[0] == 'G') {
+      skill_index = 0;
+      skill_div = '.guard-points';
+    } else {
+      skill_index = 1;
+      skill_div = '.lock-points';
+    }
+    Game.paying_card_ids.push(card_id);
+    card_li = $("#card" + card_id);
+    card_li.data('skill_points')[skill_index] -= 1;
+    card_li.find(skill_div).text(card_li.data('skill_points')[skill_index]);
+    Game.unpaid_aversion_cost = Game.unpaid_aversion_cost.slice(1);
+    if (Game.unpaid_aversion_cost) {
+      requestNextUnpaidSkill();
+    } else {
+      avert(Game.paying_card_ids);
+    }
+  }
+
+  function openChannel() {
+    firebase.auth().signInWithCustomToken("{{ token }}").catch(function(error) {
+      console.log('Login Failed!', error.code);
+      console.log('Error message: ', error.message);
+    });
+    var channel = firebase.database().ref('channels/{{ channel_id }}');
+    channel.on('value', function(data) {
+			updateState(data.val());
+		});
+
+    // $.post('/{{ game_id }}/{{ player_id }}/opened');  This could trigger the initial updateState;
+  }
+
+  function initialize() {
+    // $('ul.cardlist').sortable({placeholder: 'ul.cardlist li', connectWith: 'ul.cardlist'})
+    openChannel();
+    updateState(JSON.parse('{{ current_state|safe }}'));
+    $('#threat').show('drop', {direction: 'up'} , 600);
+    $('#container').show('drop', 600);
+    $('#player').show('drop', {direction: 'down'} , 600);
+    $('#sidebar').show('drop', {direction: 'right'} , 600);
+  }
+
+  setTimeout(initialize, 100);
+  </script>
+  </head>
+
+  <body>
+  <div id="overlay"></div>
+  <div id="container" style="display: none;">
+    <div id="threat">
+      <div id="threat1" class="star"></div><div id="threat2" class="star"></div><div id="threat3" class="star"></div><div id="threat4" class="star"></div><div id="threat5" class="star"></div>
+    </div>
+    <div id="table">
+      <div id="office">
+        <ul class="cardlist" id="office-cards"></ul>
+        <div id="office_location" class="staging">
+        <div id="offinf"></div>
+        {% if player_id == 2 %}
+        <button id="addOffInf" onclick="offInf();"></button>
+        {% endif %}
+        </div>
+				<div class="score-floater">
+          <div class="score" id="powers-score"></div>
+        </div>
+      </div>
+      <div id="setting">
+      <div id="scene_0" class="scene">
+        <div class="reschoice">
+          <div class="newscene">
+          </div>
+          <div class="res-options">
+          </div>
+        </div>
+        <div class="avertme">
+          <div class="dontavert">
+            <button onclick="dontAvert();">don't avert</button>
+          </div>
+        </div>
+        <ul class="cardlist" id="scene-0-powers"></ul>
+        <div class="scene-floater">
+          <div id="scene_0_token" class="scene-token"></div>
+        </div>
+        <div id="scene_0_location" class="scene-card"></div>
+        <ul class="cardlist" id="scene-0-crew"></ul>
+      </div>
+      <div id="scene_1" class="scene">
+        <div class="reschoice">
+          <div class="newscene">
+          </div>
+          <div class="res-options">
+          </div>
+        </div>
+        <div class="avertme">
+          <div class="dontavert">
+            <button onclick="dontAvert();">don't avert</button>
+          </div>
+        </div>
+        <ul class="cardlist" id="scene-1-powers"></ul>
+        <div class="scene-floater">
+          <div id="scene_1_token" class="scene-token"></div>
+        </div>
+        <div id="scene_1_location" class="scene-card"></div>
+        <ul class="cardlist" id="scene-1-crew"></ul>
+      </div>
+      <div id="scene_2" class="scene">
+        <div class="reschoice">
+          <div class="newscene">
+          </div>
+          <div class="res-options">
+          </div>
+        </div>
+        <div class="avertme">
+          <div class="dontavert">
+            <button onclick="dontAvert();">don't avert</button>
+          </div>
+        </div>
+        <ul class="cardlist" id="scene-2-powers"></ul>
+        <div class="scene-floater">
+          <div id="scene_2_token" class="scene-token"></div>
+        </div>
+        <div id="scene_2_location" class="scene-card"></div>
+        <ul class="cardlist" id="scene-2-crew"></ul>
+      </div>
+      </div>
+      <div id="hideout">
+				<div class="score-floater">
+          <div class="score" id="crew-score"></div>
+        </div>
+        <div id="hideout_location" class="staging">
+        {% if player_id == 1 %}
+          <button id="hideoutSkill" onclick="hideoutSkill();"></button>
+        {% endif %}
+        </div>
+        <ul class="cardlist" id="hideout-cards"></ul>
+      </div>
+    </div>
+    <div id="player">
+      <div id="actions">
+        <h3><span id="pronoun">not a</span> turn — <span id="action-count">X</span> actions left</h3>
+        <div id="buttons">
+          <button id="draw" onclick="drawOne();" disabled>Draw (X)</button><br>
+          <button id="end" onclick="endTurn();" disabled>End Turn</button>
+        </div>
+      </div>
+      <div id="hand">
+        <h3 id="hand-title">Hand</h3>
+        <ul class="cardlist" id="hand-cards"></ul>
+        <span id="discard"> — Please discard —</span>
+        <button id="mulligan" onclick="mulligan();" disabled>Mulligan</span>
+      </div>
+    </div>
+    <div id="skip-select">
+      <button id="skip-button" onclick="select('__cancel');">skip selection</button>
+    </div>
+  </div>
+	<div id="sidebar">
+		<div id="card-preview"></div>
+		<div id="token-preview"></div>
+		<div id="messagebox"></div>
+	</div>
+  </body>
+</html>

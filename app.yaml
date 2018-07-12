@@ -1,0 +1,30 @@
+runtime: python27
+api_version: 1
+threadsafe: false
+
+libraries:
+- name: webapp2
+  version: latest
+- name: jinja2
+  version: latest
+
+# builtins:
+# - appstats: on
+
+handlers:
+
+- url: /styles
+  static_dir: styles
+
+- url: /(.*\.(gif|png|jpg))
+  static_files: \1
+  upload: (.*\.(gif|png|jpg))
+  expiration: 7d
+
+- url: /privacy
+  static_files: templates/privacy.html
+  upload: templates/privacy.html
+
+- url: /.*
+  script: olj.app
+  login: required
